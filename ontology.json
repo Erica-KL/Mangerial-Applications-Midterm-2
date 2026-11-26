@@ -1,0 +1,567 @@
+{
+  "ontology": "zombie-social-abm",
+  "version": "0.3-draft",
+  "status": "AI-assisted draft, revised after three-agent challenge round and author answers; awaiting author sign-off",
+  "owner": "Erica Kline",
+  "drafted_by": "AI-assisted draft from the MAOO3 code and the author's design decisions (see write-up)",
+  "scope": "Simplified zombie outbreak ABM for studying how similarity-based likeability changes human survival. Lab, medicine, births/aging, weapons, armor, learn and zombie rot are out of scope.",
+  "source_code_note": "line numbers refer to simulation.py / zombie_storage.py, copied unchanged from MAOO3",
+  "competency_questions": [
+    {
+      "id": "CQ1",
+      "question": "Which attributes decide fight or flee?",
+      "answered_by": [
+        "R3"
+      ],
+      "attributes": [
+        "aggression"
+      ]
+    },
+    {
+      "id": "CQ2",
+      "question": "What decides whether a bite infects, and how does that change after surviving one?",
+      "answered_by": [
+        "R5",
+        "R6"
+      ],
+      "attributes": [
+        "susceptibility",
+        "bites_survived"
+      ]
+    },
+    {
+      "id": "CQ3",
+      "question": "How do two humans become friends or rivals?",
+      "answered_by": [
+        "R7",
+        "R8"
+      ],
+      "attributes": [
+        "likeability",
+        "aggression",
+        "intelligence"
+      ]
+    },
+    {
+      "id": "CQ4",
+      "question": "What does a human do with no zombie in sight, awake and asleep?",
+      "answered_by": [
+        "R1",
+        "R9",
+        "R11"
+      ],
+      "note": "awake: walks toward a liked friend, otherwise wanders; asleep: stays put; lab research is out of scope"
+    },
+    {
+      "id": "CQ5",
+      "question": "What happens to relationships when an agent turns or dies?",
+      "answered_by": [
+        "R10"
+      ]
+    },
+    {
+      "id": "CQ6",
+      "question": "What is measured to show emergence, and against what baseline?",
+      "answered_by": [
+        "metrics",
+        "experiments"
+      ]
+    }
+  ],
+  "classes": {
+    "Human": {
+      "description": "A living person who can fight, flee, sleep, be bitten, form relationships and turn into a zombie.",
+      "states": [
+        "healthy",
+        "exposed",
+        "infected",
+        "dead"
+      ],
+      "attributes": {
+        "life_value": {
+          "type": "float",
+          "valid": [
+            0,
+            100
+          ],
+          "init": 100,
+          "source": "zombie_storage.py:137"
+        },
+        "strength": {
+          "type": "float",
+          "valid": [
+            0,
+            1000
+          ],
+          "init": "uniform(5, 15)",
+          "source": "zombie_storage.py:138"
+        },
+        "intelligence": {
+          "type": "float",
+          "valid": [
+            0,
+            1000
+          ],
+          "init": "uniform(1, 10)",
+          "source": "zombie_storage.py:138"
+        },
+        "aggression": {
+          "type": "float",
+          "valid": [
+            0,
+            100
+          ],
+          "init": "uniform(0, 100)",
+          "meaning": "percent chance to fight instead of flee when a zombie is in sight",
+          "source": "zombie_storage.py:140"
+        },
+        "susceptibility": {
+          "type": "float",
+          "valid": [
+            0,
+            100
+          ],
+          "init": "uniform(80, 99)",
+          "meaning": "percent chance that a bite infects",
+          "source": "zombie_storage.py:139"
+        },
+        "movement_speed": {
+          "type": "float",
+          "valid": [
+            0,
+            1000
+          ],
+          "init": 4.0,
+          "source": "simulation.py:94"
+        },
+        "x": {
+          "type": "float",
+          "valid": "inside the map"
+        },
+        "y": {
+          "type": "float",
+          "valid": "inside the map"
+        },
+        "heading": {
+          "type": "float",
+          "valid": "any finite value"
+        },
+        "fighting": {
+          "type": "bool",
+          "meaning": "stance chosen this tick",
+          "source": "simulation.py:489-495"
+        },
+        "status_timer": {
+          "type": "int",
+          "valid": ">= 0",
+          "meaning": "ticks spent exposed or infected"
+        },
+        "bites_survived": {
+          "type": "int",
+          "valid": ">= 0"
+        },
+        "likeability": {
+          "type": "relation",
+          "see": "relations.Likes"
+        }
+      }
+    },
+    "Zombie": {
+      "description": "A turned or initial zombie. Always chases the nearest living human. Has no relationships.",
+      "states": [
+        "turned",
+        "dead"
+      ],
+      "attributes": {
+        "life_value": {
+          "type": "float",
+          "valid": [
+            0,
+            100
+          ],
+          "init": 100
+        },
+        "strength": {
+          "type": "float",
+          "valid": [
+            0,
+            1000
+          ],
+          "init": "uniform(5, 15)"
+        },
+        "movement_speed": {
+          "type": "float",
+          "valid": [
+            0,
+            1000
+          ],
+          "init": 2.6,
+          "source": "simulation.py:95"
+        },
+        "x": {
+          "type": "float",
+          "valid": "inside the map"
+        },
+        "y": {
+          "type": "float",
+          "valid": "inside the map"
+        },
+        "heading": {
+          "type": "float",
+          "valid": "any finite value"
+        }
+      },
+      "note": "Turning keeps the same object, agent_id and every attribute; only type, state, speed and slots change (simulation.py:505-509). Ids are humans 1..750 then zombies 751..1000 (zombie_storage.py new_state). Fields aggression, intelligence and susceptibility are retained but unused after turning."
+    }
+  },
+  "relations": {
+    "Likes": {
+      "from": "Human",
+      "to": "Human",
+      "value": {
+        "type": "float",
+        "range": [
+          -1,
+          1
+        ],
+        "meaning": "-1 strong dislike, 0 neutral, 1 strong like"
+      },
+      "capacity": 5,
+      "capacity_rule": "Each human holds at most 5 relationships, ranked by absolute value. Pairs not held are tracked in a transient per-direction pending table (not a relationship, never shown in the UI). In R8 all new values are computed from the tick-start values (snapshot). The candidates (held plus pending) are then ranked by |value| descending. Ties: a held pair beats a pending pair, then the lower partner agent_id. The top 5 are held, the rest stay pending. Entries with |value| < prune_below are dropped. A held slot is lost only by being outranked, by falling below prune_below, or by R10.",
+      "symmetric": false,
+      "ends_when": "either agent turns, becomes infected, or dies (author decision: a bitten friend is no longer a social partner)",
+      "symmetric_note": "A->B and B->A are computed independently; compat is symmetric, slot contents may differ."
+    }
+  },
+  "environment": {
+    "population": {
+      "total": 1000,
+      "humans": 750,
+      "zombies": 250,
+      "source": "simulation.py:90-92"
+    },
+    "map": {
+      "shape": "square",
+      "side": "round(1000 * sqrt(total / 475))",
+      "side_at_1000_agents": 1451,
+      "source": "simulation.py:93"
+    },
+    "time": {
+      "ticks_per_day": 10,
+      "night_starts_at_tick_of_day": 5,
+      "steps_per_tick": 10,
+      "dt_per_step": 0.1,
+      "source": "simulation.py:451-452, zombie_storage.py:8"
+    },
+    "radii": {
+      "perception": 120,
+      "collision": 12,
+      "bond": 40,
+      "source_perception": "simulation.py:158",
+      "source_collision": "simulation.py:249",
+      "bond_status": "proposed, new"
+    }
+  },
+  "parameters": {
+    "turn_ticks": {
+      "value": 30,
+      "meaning": "ticks from infected to zombie",
+      "source": "simulation.py:453"
+    },
+    "exposed_ticks": {
+      "value": 2,
+      "source": "simulation.py:455"
+    },
+    "susceptibility_decay": {
+      "value": 5,
+      "meaning": "susceptibility lost per survived bite",
+      "source": "simulation.py:454, 606"
+    },
+    "attack_scale": {
+      "value": 0.75,
+      "meaning": "damage per step = strength * attack_scale * dt, both sides",
+      "source": "simulation.py:250"
+    },
+    "like_rate": {
+      "value": 0.05,
+      "status": "proposed, tune in a test run"
+    },
+    "like_decay": {
+      "value": 0.01,
+      "meaning": "fraction of likeability lost per tick when the pair is apart",
+      "status": "proposed, tune in a test run"
+    },
+    "compat_weights": {
+      "aggression": 0.5,
+      "intelligence": 0.5,
+      "status": "proposed"
+    },
+    "compat_slope": {
+      "value": 3,
+      "meaning": "average random pair (d about 1/3) is neutral",
+      "status": "proposed"
+    },
+    "pull_threshold": {
+      "value": 0.2,
+      "meaning": "minimum likeability for an agent to walk toward a friend",
+      "status": "proposed"
+    },
+    "cluster_threshold": {
+      "value": 0.5,
+      "meaning": "likeability needed for two agents to count as one cluster, measurement only",
+      "status": "proposed"
+    },
+    "prune_below": {
+      "value": 0.02,
+      "meaning": "pending or held |L| below this is dropped",
+      "status": "proposed"
+    },
+    "stop_distance": {
+      "value": 20,
+      "meaning": "friend pull stops at or below this distance; above collision radius 12, below bond radius 40",
+      "status": "proposed"
+    },
+    "turn_rate": {
+      "value": 0.6,
+      "meaning": "wander heading change per unit time: heading += uniform(-turn_rate, turn_rate)*dt",
+      "source": "simulation.py:446"
+    },
+    "run_ticks": {
+      "value": null,
+      "meaning": "no fixed length: each run continues until no living humans remain (author decision)",
+      "status": "author decision"
+    },
+    "safety_cap_ticks": {
+      "value": 5000,
+      "meaning": "engineering guard only, in case zombies never reach the last humans; a run that hits it is reported as capped, not extinct",
+      "status": "proposed"
+    },
+    "checkpoint_ticks": {
+      "value": [
+        100,
+        250,
+        500
+      ],
+      "meaning": "ticks at which survival is reported",
+      "status": "proposed"
+    },
+    "cluster_sample_tick": {
+      "value": 60,
+      "meaning": "tick at which cluster metrics are taken (also reported at 30 and 100)",
+      "status": "proposed"
+    },
+    "outcome_window": {
+      "value": 50,
+      "meaning": "ticks after the sample tick over which member loss is counted",
+      "status": "proposed"
+    }
+  },
+  "rules": [
+    {
+      "id": "R1",
+      "name": "sleep",
+      "text": "At night humans do not move or decide. Zombies stay active. is_night uses the tick value before the end-of-tick increment.",
+      "source": "simulation.py:548"
+    },
+    {
+      "id": "R2",
+      "name": "zombie behavior",
+      "text": "A zombie moves toward the nearest living human within the perception radius, otherwise wanders (R11).",
+      "source": "simulation.py:551-552"
+    },
+    {
+      "id": "R3",
+      "name": "fight or flee",
+      "text": "Each tick, a human who sees a zombie fights with probability aggression/100, otherwise flees. A fighter moves toward the zombie, a fleer moves away.",
+      "source": "simulation.py:489-495, 616-620"
+    },
+    {
+      "id": "R4",
+      "name": "contact damage",
+      "text": "Contact damage is human-zombie only. In every step, for each pair (human, zombie) that are both alive at the start of the step and within the collision radius: the human loses zombie.strength*attack_scale*dt and the zombie loses human.strength*attack_scale*dt. Damage is summed over all touching partners and applied simultaneously at the end of the step; life is clamped at 0 and life <= 0 means dead (a creature killed this step still lands its hit). No human-human or zombie-zombie damage. Healthy, exposed, infected and sleeping humans take and deal damage. Stance changes movement only.",
+      "source": "simulation.py:312-316, 341-351"
+    },
+    {
+      "id": "R5",
+      "name": "bite",
+      "text": "After the 10th step of a tick, using positions after that step, each living human with state healthy or exposed that is within the collision radius of a living zombie rolls once, uniform(0,100). If roll < susceptibility it becomes infected (status_timer = 0), otherwise exposed (status_timer = 0, bites_survived + 1, susceptibility - susceptibility_decay, minimum 0). Infected humans are not bitten again. An exposed human can be bitten again, and a bite resets status_timer.",
+      "source": "simulation.py:322, 582-608"
+    },
+    {
+      "id": "R6",
+      "name": "infection progress",
+      "text": "Infected humans turn into zombies after turn_ticks. Exposed humans return to healthy after exposed_ticks. Timer semantics: a bite at the end of tick T sets timer 0 and R6 runs in the same tick, so the human turns at the end of tick T+29 and an exposed human is healthy again at the end of tick T+1. A human that first sees a zombie mid-tick uses the stance rolled at the previous tick end.",
+      "source": "simulation.py:160-162, 499-519, 599, 604"
+    },
+    {
+      "id": "R7",
+      "name": "compatibility",
+      "text": "a = aggression/100, i = (intelligence - 1)/9. d = w_a*|a1 - a2| + w_i*|i1 - i2|. compat = clip(1 - compat_slope * d, -1, 1). Symmetric and deterministic.",
+      "status": "new"
+    },
+    {
+      "id": "R8",
+      "name": "likeability update",
+      "text": "After R10, once per tick, on positions after the 10th step, for each living healthy or exposed human H and for each direction H->P independently. Take the snapshot of H's held and pending values. For every living healthy or exposed human P within the bond radius: v = clip(v_old + like_rate*compat(H,P), -1, 1), where v_old is the held value, else the pending value, else 0. For every held or pending P outside the bond radius: v = v_old*(1 - like_decay). Drop |v| < prune_below. Rank and keep the top 5 as in relations.Likes.capacity_rule. Sleeping humans update. The baseline arm runs R8 identically; only R9 is disabled.",
+      "status": "new"
+    },
+    {
+      "id": "R9",
+      "name": "social pull",
+      "text": "Evaluated every step for an awake living human H with no living zombie within the perception radius (checked every step, not only at tick end). Candidates are held partners P that are alive, state healthy or exposed (infected friends are not candidates, author decision), within the perception radius, with L >= pull_threshold. The target is the candidate with the highest L, ties to the lower agent_id. If the target is farther than stop_distance, H moves toward it at speed*dt; if at or within stop_distance, H does not move. With no candidate, H wanders (R11). Rivals (L <= -pull_threshold) have no behaviour. Disabled in the baseline arm. Known limitation: R9 does not check that the partner is safe.",
+      "status": "new"
+    },
+    {
+      "id": "R10",
+      "name": "relationship end",
+      "text": "At the end of each tick, after R6 and before R8: remove every agent that is dead, infected or has turned from all slots and pending tables, and clear its own. Deaths and bites between purges are handled by R9, which ignores partners that are not living healthy or exposed humans at the moment of the decision. The constraint 'no relationship with a dead, infected or zombie agent' holds at tick boundaries.",
+      "status": "new"
+    },
+    {
+      "id": "R11",
+      "name": "wander",
+      "text": "A living agent with no target (a zombie with no human in sight; a human with no zombie in sight and no R9 target) does heading += uniform(-turn_rate, turn_rate)*dt and then moves speed*dt along the heading, every step. Positions are clamped to the map after moving; heading is not changed by the clamp.",
+      "source": "simulation.py:446, 574-575, 659-662"
+    }
+  ],
+  "tick_schedule": [
+    "every step (10 per tick), from step-start positions: decide for all agents (R1, R2, R3, R9, R11); then move everyone and clamp to the map; then contact damage (R4), simultaneous",
+    "after the 10th step: tick += 1; bites (R5); infection and exposure timers and turning (R6); R10; R8; stance roll (R3) for all living humans, including at night; sample metrics"
+  ],
+  "constraints": [
+    "agent_id values are unique whole numbers",
+    "life_value <= 0 if and only if state is dead",
+    "every numeric attribute lies inside its valid range",
+    "every agent is inside the map",
+    "human state is one of healthy, exposed, infected, dead; zombie state is one of turned, dead",
+    "every likeability value is inside [-1, 1]",
+    "a zombie holds no relationships",
+    "a human holds at most 5 relationships, none with itself, none with a zombie, an infected or a dead agent (at tick boundaries)",
+    "conversion keeps agent_id; ids are never reused"
+  ],
+  "metrics": {
+    "humans_alive": "living humans with state healthy, exposed or infected per tick (matches zombie_storage.py:179-180)",
+    "humans_infected": "count of infected humans per tick",
+    "zombies_alive": "living zombies per tick",
+    "survival_rate": "humans_alive at each checkpoint tick / 750; also report humans_not_infected at the same ticks (both reported, engine count is the headline)",
+    "time_to_extinction": "first tick with zero living humans, or null if capped",
+    "lost_member": "a human is lost if it is dead or has turned",
+    "spatial_cluster": "connected components of living humans with pairwise distance <= bond radius, sampled at cluster_sample_tick; independent of L; singletons excluded",
+    "cluster_count_and_size": "L-based components with L >= cluster_threshold among living healthy or exposed humans, singletons excluded, sampled at cluster_sample_tick and also reported at ticks 30 and 100. Interpret only relative to baseline and to the spatial metric: L-defined clusters have lower aggression variance by construction",
+    "aggression_homophily": "pooled within-cluster aggression variance (clusters of size >= 2) / variance over all living humans at the sample time; computed for both spatial and L-based clusters",
+    "fighter_vs_runner_bands": "mean aggression per cluster at cluster_sample_tick vs fraction of its members lost within outcome_window ticks",
+    "sampling_point": "end of tick after R8 at tick % 10 == 0 (the start of a day), identical in both arms"
+  },
+  "experiments": {
+    "baseline": {
+      "social_pull": false,
+      "note": "same ontology and code; likeability tracked (R8) but R9 disabled"
+    },
+    "social": {
+      "social_pull": true
+    },
+    "seeds_per_condition": 10,
+    "run_length": "until no living humans remain (author decision), with safety_cap_ticks as an engineering guard",
+    "execution": "one run at a time, arms run sequentially (author decision)",
+    "pairing": "seed k is used in both arms; initial population (positions, attributes, headings) comes from rng_init(seed), dynamics from a separate rng_dyn(seed, arm). Both arms start from the same population.",
+    "reporting": "per-seed paired differences in survival_rate, time_to_extinction, spatial and L-based homophily, with mean and a 95% interval",
+    "status": "proposed"
+  },
+  "out_of_scope": [
+    "lab and research (optional extension)",
+    "medicine",
+    "births and aging",
+    "weapons, armor, learn",
+    "zombie decay or rot"
+  ],
+  "presentation": {
+    "status": "approved by the author",
+    "sprites": {
+      "folder": "sprites/",
+      "cosmetic_only": true,
+      "rule_in_order": [
+        {
+          "if": "agent is a zombie",
+          "sprite": "zombie.png"
+        },
+        {
+          "if": "human with intelligence > 5",
+          "sprite": "scientist.png",
+          "note": "marks 'intelligence above 5' only, no lab in this version"
+        },
+        {
+          "if": "human with strength > 10",
+          "sprite": "sergeant.png",
+          "note": "10 is the midpoint of the 5-15 starting range"
+        },
+        {
+          "if": "any other human with an odd agent_id",
+          "sprite": "business.png"
+        },
+        {
+          "if": "any other human with an even agent_id",
+          "sprite": "diva.png"
+        }
+      ]
+    },
+    "relationship_listing": {
+      "shown_on": [
+        "hover tooltip",
+        "click inspector"
+      ],
+      "position": "beneath the agent data",
+      "contents": "up to 5 partners: agent id, likeability, partner aggression and intelligence",
+      "layout": "scales to fit small screens"
+    }
+  },
+  "changelog": [
+    {
+      "version": "0.2",
+      "changes": [
+        "added competency questions mapped to rules",
+        "lab and research marked out of scope (optional extension)",
+        "added presentation section: sprite rule and relationship listing"
+      ]
+    },
+    {
+      "version": "0.3",
+      "changes": [
+        "snapshot-then-top-5 slot rule with pending table and prune_below",
+        "R4 rewritten as human-zombie only; R5 and R6 timer semantics made explicit",
+        "R9 target rule, stop_distance, infected friends excluded; R10 ordering before R8",
+        "added R11 wander and a two-pass tick schedule",
+        "metrics: added spatial cluster metric, survival and lost-member definitions, singletons excluded",
+        "experiments: no run cap, shared initial population via separate init stream, sequential runs",
+        "added known_limitations and implementation_notes"
+      ]
+    }
+  ],
+  "references": [
+    {
+      "title": "Mesa 3: Agent-based modeling with Python in 2025",
+      "doi": "10.21105/joss.07668"
+    },
+    {
+      "title": "Mesa documentation",
+      "url": "https://mesa.readthedocs.io/latest/"
+    }
+  ],
+  "known_limitations": [
+    "no shuffled-pull control arm (pull toward random humans): an effect could come from clumping rather than similarity",
+    "R9 does not check partner safety, so oscillation near fights is possible",
+    "with stop distance 20, several friends can still touch the same zombie",
+    "exposed is almost cosmetic: bites treat exposed and healthy alike",
+    "wander is nearly straight (persistence about 667 units on a 1451 map) and agents slide along walls",
+    "R9 is dormant until about tick 20-30 because zombies are within sight of almost everyone",
+    "metrics sampled at tick % 10 == 0 are phase-locked to the start of a day",
+    "coordinator's supporting numbers came from a rough re-implementation with 3-4 seeds, indicative only"
+  ],
+  "implementation_notes": [
+    "Model.step = one sub-step; a tick counter increments after every 10 steps.",
+    "One agent class with a mutable kind; do not recreate agents on turning.",
+    "Use Mesa 3.5.x and record which continuous-space class is used. The legacy mesa.space.ContinuousSpace raises if x >= side or < 0 (tested in 3.5.3); clamp to [0, side) before every move. The engine clamps inclusively (simulation.py:574-575), so this is a deliberate one-ulp difference.",
+    "Two-pass update: decide for all agents from step-start positions, then move all. Activation order is then irrelevant.",
+    "Build one spatial index per step; do not call a per-agent neighbour query.",
+    "Line numbers cited were verified against the MAOO3 copy."
+  ]
+}
